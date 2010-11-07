@@ -1786,7 +1786,9 @@ bool AudioPolicyManagerALSA::AudioOutputDescriptor::isUsedByStrategy(routing_str
             return true;
         }
     }
+#ifdef HAVE_FM_RADIO
     if (AudioPolicyManagerALSA::getStrategy(AudioSystem::FM) == strategy) return true; //because refcount is always 0 for FM
+#endif
     return false;
 }
 
