@@ -1292,7 +1292,9 @@ AudioPolicyManagerALSA::routing_strategy AudioPolicyManagerALSA::getStrategy(Aud
     case AudioSystem::SYSTEM:
         // NOTE: SYSTEM stream uses MEDIA strategy because muting music and switching outputs
         // while key clicks are played produces a poor result
+#ifdef HAVE_FM_RADIO
     case AudioSystem::FM:
+#endif
     case AudioSystem::TTS:
     case AudioSystem::MUSIC:
         return STRATEGY_MEDIA;
