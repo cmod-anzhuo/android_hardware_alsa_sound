@@ -188,8 +188,12 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
                         mpClientInterface->suspendOutput(mA2dpOutput);
                     }
                 } else if (device == AudioSystem::DEVICE_OUT_WIRED_HEADSET ||
+#ifdef HAVE_FM_RADIO
                            device == AudioSystem::DEVICE_OUT_WIRED_HEADPHONE ||
                            device == AudioSystem::DEVICE_OUT_FM) {
+#else
+                           device == AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) {
+#endif
                     LOGD("setDeviceConnectionState() wired headset device");
                     // if connecting a wired headset, we check the following by order of priority
                     // to request a routing change if necessary:
