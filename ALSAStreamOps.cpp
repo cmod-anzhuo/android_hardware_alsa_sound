@@ -155,8 +155,6 @@ status_t ALSAStreamOps::set(int      *format,
 status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 {
     AudioParameter param = AudioParameter(keyValuePairs);
-    ALSAControl *ac=new ALSAControl(); 
-    
     String8 key;
     status_t status = NO_ERROR;
     int device;
@@ -172,9 +170,7 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
 //    if (param.getInt(key, device) == NO_ERROR) {
 //        ac->set("FM Radio Path",0,0);
 //    }
-    
-    delete ac;
-    
+
     key = String8(AudioParameter::keyRouting);
     LOGD("ALSAStreamOps::setParameters() %s", keyValuePairs.string());
     if (param.getInt(key, device) == NO_ERROR) {
@@ -306,6 +302,7 @@ status_t ALSAStreamOps::open(int mode)
     return mParent->mALSADevice->open(mHandle, mHandle->curDev, mode);
 }
 
+#ifdef HAVE_FM_RADIO
 static status_t set_volume_fm(uint32_t volume)
 {
     int returnval = 0;
@@ -332,5 +329,6 @@ status_t ALSAStreamOps::setFmVolume(float v)
     set_volume_fm(vol);
     return NO_ERROR;
 }
+#endif
 
 }       // namespace android

@@ -12,6 +12,10 @@ ifeq ($(strip $(BOARD_USES_ALSA_AUDIO)),true)
   LOCAL_ARM_MODE := arm
   LOCAL_CFLAGS := -D_POSIX_SOURCE
 
+ifeq ($(BOARD_HAVE_FM_RADIO),true)
+  LOCAL_CFLAGS += -DHAVE_FM_RADIO
+endif
+
   LOCAL_C_INCLUDES += external/alsa-lib/include
 
   LOCAL_SRC_FILES := \
@@ -51,6 +55,10 @@ ifeq ($(BOARD_HAVE_BLUETOOTH),true)
   LOCAL_CFLAGS += -DWITH_A2DP
 endif
 
+ifeq ($(BOARD_HAVE_FM_RADIO),true)
+  LOCAL_CFLAGS += -DHAVE_FM_RADIO
+endif
+
   LOCAL_SRC_FILES := AudioPolicyManagerALSA.cpp
 
   LOCAL_MODULE := libaudiopolicy
@@ -78,6 +86,10 @@ ifneq ($(ALSA_DEFAULT_SAMPLE_RATE),)
     LOCAL_CFLAGS += -DALSA_DEFAULT_SAMPLE_RATE=$(ALSA_DEFAULT_SAMPLE_RATE)
 endif
 
+ifeq ($(BOARD_HAVE_FM_RADIO),true)
+  LOCAL_CFLAGS += -DHAVE_FM_RADIO
+endif
+
   LOCAL_C_INCLUDES += external/alsa-lib/include
 
   LOCAL_SRC_FILES:= alsa_default.cpp
@@ -99,6 +111,10 @@ endif
   LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 
   LOCAL_CFLAGS := -D_POSIX_SOURCE -Wno-multichar
+
+ifeq ($(BOARD_HAVE_FM_RADIO),true)
+  LOCAL_CFLAGS += -DHAVE_FM_RADIO
+endif
 
   LOCAL_C_INCLUDES += external/alsa-lib/include
 
