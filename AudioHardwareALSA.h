@@ -137,6 +137,7 @@ public:
     String8             getParameters(const String8& keys);
 #ifdef HAVE_FM_RADIO
     status_t            setFmVolume(float volume);
+    bool                mFmOn;
 #endif
     uint32_t            sampleRate() const;
     size_t              bufferSize() const;

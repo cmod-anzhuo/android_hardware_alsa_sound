@@ -159,17 +159,27 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     status_t status = NO_ERROR;
     int device;
 
-//    key = String8(AudioParameter::keyFmOn); //dunno what todo here
-//    LOGD("ALSAStreamOps::setParameters() %s", keyValuePairs.string());
-//    if (param.getInt(key, device) == NO_ERROR) {
-//        ac->set("FM Radio Path",0,2);
-//    }
-    
-//    key = String8(AudioParameter::keyFmOff); //dunno what todo here
-//    LOGD("ALSAStreamOps::setParameters() %s", keyValuePairs.string());
-//    if (param.getInt(key, device) == NO_ERROR) {
-//        ac->set("FM Radio Path",0,0);
-//    }
+#ifdef HAVE_FM_RADIO
+    if (param.getInt(key, device) == NO_ERROR) {
+        if((device & AudioSystem::DEVICE_OUT_FM) && mFmOn == false){
+            mFmOn = true;
+         } else if (mFmOn == true && !(device & AudioSystem::DEVICE_OUT_FM)){
+            mFmOn = false;
+         }
+    }
+
+    key = String8(AudioParameter::keyFmOn);
+    LOGD("ALSAStreamOps::setParameters() %s", keyValuePairs.string());
+    if (param.getInt(key, device) == NO_ERROR) {
+        mFmOn = true;
+    }
+
+    key = String8(AudioParameter::keyFmOff);
+    LOGD("ALSAStreamOps::setParameters() %s", keyValuePairs.string());
+    if (param.getInt(key, device) == NO_ERROR) {
+        mFmOn = false;
+    }
+#endif
 
     key = String8(AudioParameter::keyRouting);
     LOGD("ALSAStreamOps::setParameters() %s", keyValuePairs.string());
