@@ -136,7 +136,6 @@ public:
     status_t            setParameters(const String8& keyValuePairs);
     String8             getParameters(const String8& keys);
 #ifdef HAVE_FM_RADIO
-    status_t            setFmVolume(float volume);
     bool                mFmOn;
 #endif
     uint32_t            sampleRate() const;
@@ -310,6 +309,10 @@ public:
     // mic mute
     virtual status_t    setMicMute(bool state);
     virtual status_t    getMicMute(bool* state);
+
+#ifdef HAVE_FM_RADIO
+    virtual status_t    setFmVolume(float volume);
+#endif
 
     // set/get global audio parameters
     //virtual status_t    setParameters(const String8& keyValuePairs);

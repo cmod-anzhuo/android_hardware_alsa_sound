@@ -169,20 +169,24 @@ status_t ALSAStreamOps::setParameters(const String8& keyValuePairs)
     }
 
     key = String8(AudioParameter::keyFmOn);
-    LOGD("ALSAStreamOps::setParameters() %s", keyValuePairs.string());
     if (param.getInt(key, device) == NO_ERROR) {
+        AutoMutex lock(mLock);
+        mParent->mALSADevice->route(mHandle, (uint32_t)device & AudioSystem::DEVICE_OUT_ALL, mParent->mode());
+        param.remove(key);
         mFmOn = true;
     }
 
     key = String8(AudioParameter::keyFmOff);
-    LOGD("ALSAStreamOps::setParameters() %s", keyValuePairs.string());
     if (param.getInt(key, device) == NO_ERROR) {
+        AutoMutex lock(mLock);
+        mParent->mALSADevice->route(mHandle, (uint32_t)device & AudioSystem::DEVICE_OUT_ALL, mParent->mode());
+        param.remove(key);
         mFmOn = false;
     }
 #endif
 
     key = String8(AudioParameter::keyRouting);
-    LOGD("ALSAStreamOps::setParameters() %s", keyValuePairs.string());
+    LOGW("ALSAStreamOps::setParameters() %s", keyValuePairs.string());
     if (param.getInt(key, device) == NO_ERROR) {
         AutoMutex lock(mLock);
         mParent->mALSADevice->route(mHandle, (uint32_t)device, mParent->mode());
@@ -205,7 +209,7 @@ String8 ALSAStreamOps::getParameters(const String8& keys)
         param.addInt(key, (int)mHandle->curDev);
     }
 
-    LOGD("getParameters() %s", param.toString().string());
+    LOGW("getParameters() %s", param.toString().string());
     return param.toString();
 }
 
@@ -311,34 +315,5 @@ status_t ALSAStreamOps::open(int mode)
 {
     return mParent->mALSADevice->open(mHandle, mHandle->curDev, mode);
 }
-
-#ifdef HAVE_FM_RADIO
-static status_t set_volume_fm(uint32_t volume)
-{
-    int returnval = 0;
-    float ratio = 2.5;
-    char s1[100] = "hcitool cmd 0x3f 0xa 0x5 0xc0 0x41 0xf 0 0x20 0 0 0";
-    char s2[100] = "hcitool cmd 0x3f 0xa 0x5 0xe4 0x41 0xf 0 0x00 0 0 0";
-    char s3[100] = "hcitool cmd 0x3f 0xa 0x5 0xe0 0x41 0xf 0 ";
-    char stemp[10] = "";
-    char *pstarget = s3;
-    volume = (unsigned int)(volume * ratio);
-    sprintf(stemp, "0x%x ", volume);
-    pstarget = strcat(s3, stemp);
-    pstarget = strcat(s3, "0 0 0");
-    system(s1);
-    system(s2);
-    system(s3);
-    return returnval;
-}
-
-status_t ALSAStreamOps::setFmVolume(float v)
-{
-    int vol = AudioSystem::logToLinear(v);
-    LOGV("setFmVolume %d", vol);
-    set_volume_fm(vol);
-    return NO_ERROR;
-}
-#endif
 
 }       // namespace android

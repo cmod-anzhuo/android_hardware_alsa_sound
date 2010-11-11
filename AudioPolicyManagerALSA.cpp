@@ -33,7 +33,7 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
                                                   const char *device_address)
 {
 
-    LOGD("setDeviceConnectionState() device: %x, state %d, address %s", device, state, device_address);
+    LOGW("setDeviceConnectionState() device: %x, state %d, address %s", device, state, device_address);
 
     // connect/disconnect only 1 device at a time
     if (AudioSystem::popCount(device) != 1) return BAD_VALUE;
@@ -63,7 +63,7 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
             }
             LOGW_IF((getOutputForDevice((uint32_t)device) != 0), "setDeviceConnectionState(): output using unconnected device %x", device);
 
-            LOGD("setDeviceConnectionState() connecting device %x", device);
+            LOGV("setDeviceConnectionState() connecting device %x", device);
 
             // register new device as available
             mAvailableOutputDevices |= device;
@@ -72,7 +72,7 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
             // handle A2DP device connection
             if (AudioSystem::isA2dpDevice(device)) {
                 // when an A2DP device is connected, open an A2DP and a duplicated output
-                LOGD("opening A2DP output for device %s", device_address);
+                LOGV("opening A2DP output for device %s", device_address);
                 AudioOutputDescriptor *outputDesc = new AudioOutputDescriptor();
                 outputDesc->mDevice = device;
                 mA2dpOutput = mpClientInterface->openOutput(&outputDesc->mDevice,
@@ -172,7 +172,7 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
 
                 uint32_t newDevice = 0;
                 if (AudioSystem::isBluetoothScoDevice(device)) {
-                    LOGD("setDeviceConnectionState() BT SCO  device, address %s", device_address);
+                    LOGV("setDeviceConnectionState() BT SCO  device, address %s", device_address);
                     // keep track of SCO device address
                     mScoDeviceAddress = String8(device_address, MAX_DEVICE_ADDRESS_LEN);
                     // if in call and connecting SCO device, check if we must reroute hardware output
@@ -194,7 +194,7 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
 #else
                            device == AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) {
 #endif
-                    LOGD("setDeviceConnectionState() wired headset device");
+                    LOGV("setDeviceConnectionState() wired headset device");
                     // if connecting a wired headset, we check the following by order of priority
                     // to request a routing change if necessary:
                     // 1: we are in call or the strategy phone is active on the hardware output:
@@ -221,7 +221,7 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
                     }
 #ifdef SUPPORT_DEVICE_OUT_TTY
                 } else if (device == AudioSystem::DEVICE_OUT_TTY) {
-                    LOGD("setDeviceConnectionState() tty device");
+                    LOGV("setDeviceConnectionState() tty device");
                     // if connecting a wired headset, we check the following by order of priority
                     // to request a routing change if necessary:
                     // 1: we are in call or the strategy phone is active on the hardware output:
@@ -237,6 +237,21 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
                 setOutputDevice(mHardwareOutput, newDevice);
                 
             }
+#ifdef HAVE_FM_RADIO
+            if (AudioSystem::isFmDevice(device)) {
+                AudioOutputDescriptor *hwOutputDesc = mOutputs.valueFor(mHardwareOutput);
+                hwOutputDesc->mRefCount[AudioSystem::FM] = 1;
+                AudioParameter param = AudioParameter();
+                uint32_t device2 = 0;
+                if (mForceUse[AudioSystem::FOR_MEDIA] == AudioSystem::FORCE_SPEAKER) {
+                    device2 = mAvailableOutputDevices & (AudioSystem::DEVICE_OUT_FM | AudioSystem::DEVICE_OUT_SPEAKER);
+                } else {
+                    device2 = mAvailableOutputDevices & (AudioSystem::DEVICE_OUT_FM | AudioSystem::DEVICE_OUT_WIRED_HEADSET | AudioSystem::DEVICE_OUT_WIRED_HEADPHONE);
+                }
+                param.addInt(String8(AudioParameter::keyFmOn), device2);
+                mpClientInterface->setParameters(mHardwareOutput, param.toString());
+            }
+#endif
             break;
         // handle output device disconnection
         case AudioSystem::DEVICE_STATE_UNAVAILABLE: {
@@ -251,7 +266,7 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
             bool wasUsedForSonification = (getDeviceForStrategy(STRATEGY_SONIFICATION) & device) != 0;
             bool wasUsedforPhone = (getDeviceForStrategy(STRATEGY_PHONE) & device) != 0;
             bool wasUsedforDtmf = (getDeviceForStrategy(STRATEGY_DTMF) & device) != 0;
-            LOGD("setDeviceConnectionState() disconnecting device %x used by media %d, sonification %d, phone %d",
+            LOGV("setDeviceConnectionState() disconnecting device %x used by media %d, sonification %d, phone %d",
                     device, wasUsedForMedia, wasUsedForSonification, wasUsedforPhone);
             // remove device from available output devices
             mAvailableOutputDevices &= ~device;
@@ -383,7 +398,7 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
                     }
 #ifdef SUPPORT_DEVICE_OUT_TTY
                 } else if (device == AudioSystem::DEVICE_OUT_TTY) {
-                    LOGD("setDeviceConnectionState() tty device");
+                    LOGV("setDeviceConnectionState() tty device");
                     if (wasUsedforPhone &&
                         (mPhoneState == AudioSystem::MODE_IN_CALL ||
                          mOutputs.valueFor(mHardwareOutput)->isUsedByStrategy(STRATEGY_PHONE))) {
@@ -405,6 +420,15 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
             if (AudioSystem::isBluetoothScoDevice(device)) {
                 mScoDeviceAddress = "";
             }
+#ifdef HAVE_FM_RADIO
+            if (AudioSystem::isFmDevice(device)) {
+                AudioOutputDescriptor *hwOutputDesc = mOutputs.valueFor(mHardwareOutput);
+                hwOutputDesc->mRefCount[AudioSystem::FM] = 0;
+                AudioParameter param = AudioParameter();
+                param.addInt(String8(AudioParameter::keyFmOff), mAvailableOutputDevices & (AudioSystem::DEVICE_OUT_WIRED_HEADSET | AudioSystem::DEVICE_OUT_WIRED_HEADPHONE));
+                mpClientInterface->setParameters(mHardwareOutput, param.toString());
+            }
+#endif
             } break;
 
         default:
@@ -456,7 +480,7 @@ status_t AudioPolicyManagerALSA::setDeviceConnectionState(AudioSystem::audio_dev
             AudioInputDescriptor *inputDesc = mInputs.valueFor(activeInput);
             uint32_t newDevice = getDeviceForInputSource(inputDesc->mInputSource);
             if (newDevice != inputDesc->mDevice) {
-                LOGD("setDeviceConnectionState() changing device from %x to %x for input %d",
+                LOGV("setDeviceConnectionState() changing device from %x to %x for input %d",
                         inputDesc->mDevice, newDevice, activeInput);
                 inputDesc->mDevice = newDevice;
                 AudioParameter param = AudioParameter();
@@ -502,7 +526,7 @@ AudioSystem::device_connection_state AudioPolicyManagerALSA::getDeviceConnection
 
 void AudioPolicyManagerALSA::setPhoneState(int state)
 {
-    LOGD("setPhoneState() state %d", state);
+    LOGV("setPhoneState() state %d", state);
     uint32_t newDevice = 0;
     if (state < 0 || state >= AudioSystem::NUM_MODES) {
         LOGW("setPhoneState() invalid state %d", state);
@@ -517,7 +541,7 @@ void AudioPolicyManagerALSA::setPhoneState(int state)
     // if leaving call state, handle special case of active streams
     // pertaining to sonification strategy see handleIncallSonification()
     if (mPhoneState == AudioSystem::MODE_IN_CALL) {
-        LOGD("setPhoneState() in call state management: new state is %d", state);
+        LOGV("setPhoneState() in call state management: new state is %d", state);
         for (int stream = 0; stream < AudioSystem::NUM_STREAM_TYPES; stream++) {
             handleIncallSonification(stream, false, true);
         }
@@ -636,7 +660,7 @@ void AudioPolicyManagerALSA::setPhoneState(int state)
     // if entering in call state, handle special case of active streams
     // pertaining to sonification strategy see handleIncallSonification()
     if (state == AudioSystem::MODE_IN_CALL) {
-        LOGD("setPhoneState() in call state management: new state is %d", state);
+        LOGV("setPhoneState() in call state management: new state is %d", state);
         for (int stream = 0; stream < AudioSystem::NUM_STREAM_TYPES; stream++) {
             handleIncallSonification(stream, true, true);
         }
@@ -645,14 +669,14 @@ void AudioPolicyManagerALSA::setPhoneState(int state)
 
 void AudioPolicyManagerALSA::setRingerMode(uint32_t mode, uint32_t mask)
 {
-    LOGD("setRingerMode() mode %x, mask %x", mode, mask);
+    LOGV("setRingerMode() mode %x, mask %x", mode, mask);
 
     mRingerMode = mode;
 }
 
 void AudioPolicyManagerALSA::setForceUse(AudioSystem::force_use usage, AudioSystem::forced_config config)
 {
-    LOGD("setForceUse() usage %d, config %d, mPhoneState %d", usage, config, mPhoneState);
+    LOGV("setForceUse() usage %d, config %d, mPhoneState %d", usage, config, mPhoneState);
 
     switch(usage) {
     case AudioSystem::FOR_COMMUNICATION:
@@ -674,7 +698,12 @@ void AudioPolicyManagerALSA::setForceUse(AudioSystem::force_use usage, AudioSyst
         break;
     case AudioSystem::FOR_MEDIA:
         if (config != AudioSystem::FORCE_HEADPHONES && config != AudioSystem::FORCE_BT_A2DP &&
-            config != AudioSystem::FORCE_WIRED_ACCESSORY && config != AudioSystem::FORCE_SPEAKER && config != AudioSystem::FORCE_NONE) {
+#ifdef HAVE_FM_RADIO
+            config != AudioSystem::FORCE_WIRED_ACCESSORY && config != AudioSystem::FORCE_SPEAKER &&
+            config != AudioSystem::FORCE_NONE) {
+#else
+            config != AudioSystem::FORCE_WIRED_ACCESSORY && config != AudioSystem::FORCE_NONE) {
+#endif
             LOGW("setForceUse() invalid config %d for FOR_MEDIA", config);
             return;
         }
@@ -701,13 +730,13 @@ AudioSystem::forced_config AudioPolicyManagerALSA::getForceUse(AudioSystem::forc
 
 void AudioPolicyManagerALSA::setSystemProperty(const char* property, const char* value)
 {
-    LOGD("setSystemProperty() property %s, value %s", property, value);
+    LOGV("setSystemProperty() property %s, value %s", property, value);
     if (strcmp(property, "ro.camera.sound.forced") == 0) {
         if (atoi(value)) {
-            LOGD("ENFORCED_AUDIBLE cannot be muted");
+            LOGV("ENFORCED_AUDIBLE cannot be muted");
             mStreams[AudioSystem::ENFORCED_AUDIBLE].mCanBeMuted = false;
         } else {
-            LOGD("ENFORCED_AUDIBLE can be muted");
+            LOGV("ENFORCED_AUDIBLE can be muted");
             mStreams[AudioSystem::ENFORCED_AUDIBLE].mCanBeMuted = true;
         }
     }
@@ -723,7 +752,7 @@ audio_io_handle_t AudioPolicyManagerALSA::getOutput(AudioSystem::stream_type str
     uint32_t latency = 0;
     routing_strategy strategy = getStrategy((AudioSystem::stream_type)stream);
     uint32_t device = getDeviceForStrategy(strategy);
-    LOGD("getOutput() stream %d, samplingRate %d, format %d, channels %x, flags %x", stream, samplingRate, format, channels, flags);
+    LOGV("getOutput() stream %d, samplingRate %d, format %d, channels %x, flags %x", stream, samplingRate, format, channels, flags);
 
 
     // open a direct output if:
@@ -732,7 +761,7 @@ audio_io_handle_t AudioPolicyManagerALSA::getOutput(AudioSystem::stream_type str
     if ((flags & AudioSystem::OUTPUT_FLAG_DIRECT) ||
          (format !=0 && !AudioSystem::isLinearPCM(format))) {
 
-        LOGD("getOutput() opening direct output device %x", device);
+        LOGV("getOutput() opening direct output device %x", device);
         AudioOutputDescriptor *outputDesc = new AudioOutputDescriptor();
         outputDesc->mDevice = device;
         outputDesc->mSamplingRate = samplingRate;
@@ -752,7 +781,7 @@ audio_io_handle_t AudioPolicyManagerALSA::getOutput(AudioSystem::stream_type str
         if ((samplingRate != 0 && samplingRate != outputDesc->mSamplingRate) ||
             (format != 0 && format != outputDesc->mFormat) ||
             (channels != 0 && channels != outputDesc->mChannels)) {
-            LOGD("getOutput() failed opening direct output: samplingRate %d, format %d, channels %d",
+            LOGV("getOutput() failed opening direct output: samplingRate %d, format %d, channels %d",
                     samplingRate, format, channels);
             mpClientInterface->closeOutput(output);
             delete outputDesc;
@@ -775,7 +804,7 @@ audio_io_handle_t AudioPolicyManagerALSA::getOutput(AudioSystem::stream_type str
 #ifdef WITH_A2DP
         if (AudioSystem::isA2dpDevice((AudioSystem::audio_devices)device2)) {
             // if playing on 2 devices among which one is A2DP, use duplicated output
-            LOGD("getOutput() using duplicated output");
+            LOGV("getOutput() using duplicated output");
             LOGW_IF((mA2dpOutput == 0), "getOutput() A2DP device in multiple %x selected but A2DP output not opened", device);
             output = mDuplicatedOutput;
         } else
@@ -784,7 +813,7 @@ audio_io_handle_t AudioPolicyManagerALSA::getOutput(AudioSystem::stream_type str
             // if playing on 2 devices among which none is A2DP, use hardware output
             output = mHardwareOutput;
         }
-        LOGD("getOutput() using output %d for 2 devices %x", output, device);
+        LOGV("getOutput() using output %d for 2 devices %x", output, device);
     } else {
 #ifdef WITH_A2DP
         if (AudioSystem::isA2dpDevice((AudioSystem::audio_devices)device2)) {
@@ -808,7 +837,7 @@ audio_io_handle_t AudioPolicyManagerALSA::getOutput(AudioSystem::stream_type str
 
 status_t AudioPolicyManagerALSA::startOutput(audio_io_handle_t output, AudioSystem::stream_type stream)
 {
-    LOGD("startOutput() output %d, stream %d", output, stream);
+    LOGV("startOutput() output %d, stream %d", output, stream);
     ssize_t index = mOutputs.indexOfKey(output);
     if (index < 0) {
         LOGW("startOutput() unknow output %d", output);
@@ -886,7 +915,7 @@ status_t AudioPolicyManagerALSA::startOutput(audio_io_handle_t output, AudioSyst
 
 status_t AudioPolicyManagerALSA::stopOutput(audio_io_handle_t output, AudioSystem::stream_type stream)
 {
-    LOGD("stopOutput() output %d, stream %d", output, stream);
+    LOGV("stopOutput() output %d, stream %d", output, stream);
     ssize_t index = mOutputs.indexOfKey(output);
     if (index < 0) {
         LOGW("stopOutput() unknow output %d", output);
@@ -940,7 +969,7 @@ status_t AudioPolicyManagerALSA::stopOutput(audio_io_handle_t output, AudioSyste
 
 void AudioPolicyManagerALSA::releaseOutput(audio_io_handle_t output)
 {
-    LOGD("releaseOutput() %d", output);
+    LOGV("releaseOutput() %d", output);
     ssize_t index = mOutputs.indexOfKey(output);
     if (index < 0) {
         LOGW("releaseOutput() releasing unknown output %d", output);
@@ -962,7 +991,7 @@ audio_io_handle_t AudioPolicyManagerALSA::getInput(int inputSource,
     audio_io_handle_t input = 0;
     uint32_t device = getDeviceForInputSource(inputSource);
 
-    LOGD("getInput() inputSource %d, samplingRate %d, format %d, channels %x, acoustics %x", inputSource, samplingRate, format, channels, acoustics);
+    LOGV("getInput() inputSource %d, samplingRate %d, format %d, channels %x, acoustics %x", inputSource, samplingRate, format, channels, acoustics);
 
     if (device == 0) {
         return 0;
@@ -1002,7 +1031,7 @@ audio_io_handle_t AudioPolicyManagerALSA::getInput(int inputSource,
     if ((samplingRate != inputDesc->mSamplingRate) ||
         (format != inputDesc->mFormat) ||
         (channels != inputDesc->mChannels)) {
-        LOGD("getOutput() failed opening input: samplingRate %d, format %d, channels %d",
+        LOGV("getOutput() failed opening input: samplingRate %d, format %d, channels %d",
                 samplingRate, format, channels);
         mpClientInterface->closeInput(input);
         delete inputDesc;
@@ -1014,7 +1043,7 @@ audio_io_handle_t AudioPolicyManagerALSA::getInput(int inputSource,
 
 status_t AudioPolicyManagerALSA::startInput(audio_io_handle_t input)
 {
-    LOGD("startInput() input %d", input);
+    LOGV("startInput() input %d", input);
     ssize_t index = mInputs.indexOfKey(input);
     if (index < 0) {
         LOGW("startInput() unknow input %d", input);
@@ -1038,7 +1067,7 @@ status_t AudioPolicyManagerALSA::startInput(audio_io_handle_t input)
 
 status_t AudioPolicyManagerALSA::stopInput(audio_io_handle_t input)
 {
-    LOGD("stopInput() input %d", input);
+    LOGV("stopInput() input %d", input);
     ssize_t index = mInputs.indexOfKey(input);
     if (index < 0) {
         LOGW("stopInput() unknow input %d", input);
@@ -1060,7 +1089,7 @@ status_t AudioPolicyManagerALSA::stopInput(audio_io_handle_t input)
 
 void AudioPolicyManagerALSA::releaseInput(audio_io_handle_t input)
 {
-    LOGD("releaseInput() %d", input);
+    LOGV("releaseInput() %d", input);
     ssize_t index = mInputs.indexOfKey(input);
     if (index < 0) {
         LOGW("releaseInput() releasing unknown input %d", input);
@@ -1069,7 +1098,7 @@ void AudioPolicyManagerALSA::releaseInput(audio_io_handle_t input)
     mpClientInterface->closeInput(input);
     delete mInputs.valueAt(index);
     mInputs.removeItem(input);
-    LOGD("releaseInput() exit");
+    LOGV("releaseInput() exit");
 }
 
 
@@ -1078,7 +1107,7 @@ void AudioPolicyManagerALSA::initStreamVolume(AudioSystem::stream_type stream,
                                             int indexMin,
                                             int indexMax)
 {
-    LOGD("initStreamVolume() stream %d, min %d, max %d", stream , indexMin, indexMax);
+    LOGV("initStreamVolume() stream %d, min %d, max %d", stream , indexMin, indexMax);
     if (indexMin < 0 || indexMin >= indexMax) {
         LOGW("initStreamVolume() invalid index limits for stream %d, min %d, max %d", stream , indexMin, indexMax);
         return;
@@ -1094,7 +1123,7 @@ status_t AudioPolicyManagerALSA::setStreamVolumeIndex(AudioSystem::stream_type s
         return BAD_VALUE;
     }
 
-    LOGD("setStreamVolumeIndex() stream %d, index %d", stream, index);
+    LOGV("setStreamVolumeIndex() stream %d, index %d", stream, index);
     mStreams[stream].mIndexCur = index;
 
     // compute and apply stream volume on all outputs according to connected device
@@ -1113,7 +1142,7 @@ status_t AudioPolicyManagerALSA::getStreamVolumeIndex(AudioSystem::stream_type s
     if (index == 0) {
         return BAD_VALUE;
     }
-    LOGD("getStreamVolumeIndex() stream %d", stream);
+    LOGV("getStreamVolumeIndex() stream %d", stream);
     *index =  mStreams[stream].mIndexCur;
     return NO_ERROR;
 }
@@ -1260,13 +1289,13 @@ audio_io_handle_t AudioPolicyManagerALSA::getOutputForDevice(uint32_t device)
 
     for (size_t i = 0; i < mOutputs.size(); i++) {
         lDevice = mOutputs.valueAt(i)->device();
-        LOGD("getOutputForDevice() output %d devices %x", mOutputs.keyAt(i), lDevice);
+        LOGV("getOutputForDevice() output %d devices %x", mOutputs.keyAt(i), lDevice);
 
         // We are only considering outputs connected to a mixer here => exclude direct outputs
         if ((lDevice == device) &&
            !(mOutputs.valueAt(i)->mFlags & AudioSystem::OUTPUT_FLAG_DIRECT)) {
             output = mOutputs.keyAt(i);
-            LOGD("getOutputForDevice() found output %d for device %x", output, device);
+            LOGV("getOutputForDevice() found output %d for device %x", output, device);
             break;
         }
     }
@@ -1378,33 +1407,16 @@ uint32_t AudioPolicyManagerALSA::getDeviceForStrategy(routing_strategy strategy)
 
     case STRATEGY_MEDIA: {
 #ifdef HAVE_FM_RADIO
-        uint32_t device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_FM;
-        if (device2 == 0) {
-            device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+        uint32_t device2 = 0;
+        if (mForceUse[AudioSystem::FOR_MEDIA] == AudioSystem::FORCE_SPEAKER) {
+            device2 = mAvailableOutputDevices & (AudioSystem::DEVICE_OUT_FM | AudioSystem::DEVICE_OUT_SPEAKER);
+        } else {
+            device2 = mAvailableOutputDevices & (AudioSystem::DEVICE_OUT_FM | AudioSystem::DEVICE_OUT_WIRED_HEADSET);
             if (device2 == 0) {
-                device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP;
-                if (device2 == 0) {
-                    device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES;
-                    if (device2 == 0) {
-                        device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER;
-                        if (device2 == 0) {
-                            device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE;
-                            if (device2 == 0) {
-                                device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_WIRED_HEADSET;
-                                if (device2 == 0) {
-                                    device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_SPEAKER;
-                                    if (device == 0) {
-                                        LOGE("getDeviceForStrategy() speaker device not found");
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+                 device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL;
 #else
         uint32_t device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_AUX_DIGITAL;
+#endif
         if (device2 == 0) {
             device2 = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_BLUETOOTH_A2DP;
             if (device2 == 0) {
@@ -1426,6 +1438,9 @@ uint32_t AudioPolicyManagerALSA::getDeviceForStrategy(routing_strategy strategy)
                 }
             }
         }
+#ifdef HAVE_FM_RADIO
+            }
+        }
 #endif
         // device is DEVICE_OUT_SPEAKER if we come from case STRATEGY_SONIFICATION, 0 otherwise
         device |= device2;
@@ -1435,7 +1450,7 @@ uint32_t AudioPolicyManagerALSA::getDeviceForStrategy(routing_strategy strategy)
             !AudioSystem::isA2dpDevice((AudioSystem::audio_devices)device) &&
             device != getDeviceForStrategy(STRATEGY_PHONE)) {
             device = 0;
-            LOGD("getDeviceForStrategy() incompatible media and phone devices");
+            LOGV("getDeviceForStrategy() incompatible media and phone devices");
         }
         } break;
 
@@ -1444,13 +1459,13 @@ uint32_t AudioPolicyManagerALSA::getDeviceForStrategy(routing_strategy strategy)
         break;
     }
 
-    LOGD("getDeviceForStrategy() strategy %d, device %x", strategy, device);
+    LOGV("getDeviceForStrategy() strategy %d, device %x", strategy, device);
     return device;
 }
 
 void AudioPolicyManagerALSA::setOutputDevice(audio_io_handle_t output, uint32_t device, bool force, int delayMs)
 {
-    LOGD("setOutputDevice() output %d device %x delayMs %d", output, device, delayMs);
+    LOGV("setOutputDevice() output %d device %x delayMs %d", output, device, delayMs);
     if (mOutputs.indexOfKey(output) < 0) {
         LOGW("setOutputDevice() unknown output %d", output);
         return;
@@ -1461,7 +1476,7 @@ void AudioPolicyManagerALSA::setOutputDevice(audio_io_handle_t output, uint32_t 
         // do it in case of multiple device selections
         uint32_t device2 = device & ~AudioSystem::DEVICE_OUT_SPEAKER;
         if (AudioSystem::isA2dpDevice((AudioSystem::audio_devices)device2)) {
-            LOGD("setOutputDevice() removing A2DP device");
+            LOGV("setOutputDevice() removing A2DP device");
             device &= ~device2;
         }
     } else if (output == mA2dpOutput) {
@@ -1479,7 +1494,7 @@ void AudioPolicyManagerALSA::setOutputDevice(audio_io_handle_t output, uint32_t 
     // Do not change the routing if the requested device is the same as current device. Doing this check
     // here allows the caller to call setOutputDevice() without conditions
     if (device == oldDevice && !force) {
-        LOGD("setOutputDevice() setting same device %x for output %d", device, output);
+        LOGV("setOutputDevice() setting same device %x for output %d", device, output);
         return;
     }
 
@@ -1507,7 +1522,7 @@ void AudioPolicyManagerALSA::setOutputDevice(audio_io_handle_t output, uint32_t 
     // if disconnecting SCO device, restore A2DP output
     if (AudioSystem::isBluetoothScoDevice((AudioSystem::audio_devices)oldDevice)) {
          if (mA2dpOutput && mScoDeviceAddress == mA2dpDeviceAddress) {
-             LOGD("restore A2DP output");
+             LOGV("restore A2DP output");
              mpClientInterface->restoreOutput(mA2dpOutput);
          }
     }
@@ -1599,7 +1614,7 @@ float AudioPolicyManagerALSA::computeVolume(int stream, int index, audio_io_hand
             float minVol = (musicVol > SONIFICATION_HEADSET_VOLUME_MIN) ? musicVol : SONIFICATION_HEADSET_VOLUME_MIN;
             if (volume > minVol) {
                 volume = minVol;
-                LOGD("computeVolume limiting volume to %f musicVol %f", minVol, musicVol);
+                LOGV("computeVolume limiting volume to %f musicVol %f", minVol, musicVol);
             }
         }
     }
@@ -1612,14 +1627,14 @@ status_t AudioPolicyManagerALSA::checkAndSetVolume(int stream, int index, audio_
 
     // do not change actual stream volume if the stream is muted
     if (mStreams[stream].mMuteCount != 0) {
-        LOGD("checkAndSetVolume() stream %d muted count %d", stream, mStreams[stream].mMuteCount);
+        LOGV("checkAndSetVolume() stream %d muted count %d", stream, mStreams[stream].mMuteCount);
         return NO_ERROR;
     }
 
     // do not change in call volume if bluetooth is connected and vice versa
     if ((stream == AudioSystem::VOICE_CALL && mForceUse[AudioSystem::FOR_COMMUNICATION] == AudioSystem::FORCE_BT_SCO) ||
         (stream == AudioSystem::BLUETOOTH_SCO && mForceUse[AudioSystem::FOR_COMMUNICATION] != AudioSystem::FORCE_BT_SCO)) {
-        LOGD("checkAndSetVolume() cannot set stream %d volume with force use = %d for comm",
+        LOGV("checkAndSetVolume() cannot set stream %d volume with force use = %d for comm",
              stream, mForceUse[AudioSystem::FOR_COMMUNICATION]);
         return INVALID_OPERATION;
     }
@@ -1628,7 +1643,7 @@ status_t AudioPolicyManagerALSA::checkAndSetVolume(int stream, int index, audio_
     // do not set volume if the float value did not change
     if (volume != mOutputs.valueFor(output)->mCurVolume[stream]) {
         mOutputs.valueFor(output)->mCurVolume[stream] = volume;
-        LOGD("setStreamVolume() for output %d stream %d, volume %f, delay %d", output, stream, volume, delayMs);
+        LOGV("setStreamVolume() for output %d stream %d, volume %f, delay %d", output, stream, volume, delayMs);
         if (stream == AudioSystem::VOICE_CALL ||
             stream == AudioSystem::DTMF ||
             stream == AudioSystem::BLUETOOTH_SCO) {
@@ -1644,6 +1659,16 @@ status_t AudioPolicyManagerALSA::checkAndSetVolume(int stream, int index, audio_
             if (voiceVolume >= 0 && output == mHardwareOutput) {
                 mpClientInterface->setVoiceVolume(voiceVolume, delayMs);
             }
+#ifdef HAVE_FM_RADIO
+        } else if (stream == AudioSystem::FM) {
+            float fmVolume = -1.0;
+            fmVolume = computeVolume(stream, index, output, device);
+            if (fmVolume >= 0 && output == mHardwareOutput) {
+        	LOGV("fmVolume: %f", fmVolume);
+                mpClientInterface->setFmVolume(fmVolume, delayMs);
+            }
+            return NO_ERROR;
+#endif
         }
         mpClientInterface->setStreamVolume((AudioSystem::stream_type)stream, volume, output, delayMs);
     }
@@ -1653,7 +1678,7 @@ status_t AudioPolicyManagerALSA::checkAndSetVolume(int stream, int index, audio_
 
 void AudioPolicyManagerALSA::applyStreamVolumes(audio_io_handle_t output, uint32_t device, int delayMs)
 {
-    LOGD("applyStreamVolumes() for output %d and device %x", output, device);
+    LOGV("applyStreamVolumes() for output %d and device %x", output, device);
 
     for (int stream = 0; stream < AudioSystem::NUM_STREAM_TYPES; stream++) {
         checkAndSetVolume(stream, mStreams[stream].mIndexCur, output, device, delayMs);
@@ -1662,7 +1687,7 @@ void AudioPolicyManagerALSA::applyStreamVolumes(audio_io_handle_t output, uint32
 
 void AudioPolicyManagerALSA::setStrategyMute(routing_strategy strategy, bool on, audio_io_handle_t output, int delayMs)
 {
-    LOGD("setStrategyMute() strategy %d, mute %d, output %d", strategy, on, output);
+    LOGV("setStrategyMute() strategy %d, mute %d, output %d", strategy, on, output);
     for (int stream = 0; stream < AudioSystem::NUM_STREAM_TYPES; stream++) {
         if (getStrategy((AudioSystem::stream_type)stream) == strategy) {
             setStreamMute(stream, on, output, delayMs);
@@ -1675,7 +1700,7 @@ void AudioPolicyManagerALSA::setStreamMute(int stream, bool on, audio_io_handle_
     StreamDescriptor &streamDesc = mStreams[stream];
     uint32_t device = mOutputs.valueFor(output)->mDevice;
 
-    LOGD("setStreamMute() stream %d, mute %d, output %d, mMuteCount %d", stream, on, output, streamDesc.mMuteCount);
+    LOGV("setStreamMute() stream %d, mute %d, output %d, mMuteCount %d", stream, on, output, streamDesc.mMuteCount);
 
     if (on) {
         if (streamDesc.mMuteCount == 0) {
@@ -1707,7 +1732,7 @@ void AudioPolicyManagerALSA::handleIncallSonification(int stream, bool starting,
 
     if (getStrategy((AudioSystem::stream_type)stream) == STRATEGY_SONIFICATION) {
         AudioOutputDescriptor *outputDesc = mOutputs.valueFor(mHardwareOutput);
-        LOGD("handleIncallSonification() stream %d starting %d device %x stateChange %d",
+        LOGV("handleIncallSonification() stream %d starting %d device %x stateChange %d",
                 stream, starting, outputDesc->mDevice, stateChange);
         if (outputDesc->isUsedByStream((AudioSystem::stream_type)stream)) {
             int muteCount = 1;
@@ -1715,14 +1740,14 @@ void AudioPolicyManagerALSA::handleIncallSonification(int stream, bool starting,
                 muteCount = outputDesc->mRefCount[stream];
             }
             if (AudioSystem::isLowVisibility((AudioSystem::stream_type)stream)) {
-                LOGD("handleIncallSonification() low visibility, muteCount %d", muteCount);
+                LOGV("handleIncallSonification() low visibility, muteCount %d", muteCount);
                 for (int i = 0; i < muteCount; i++) {
                     setStreamMute(stream, starting, mHardwareOutput);
                 }
             } else {
-                LOGD("handleIncallSonification() high visibility ");
+                LOGV("handleIncallSonification() high visibility ");
                 if (outputDesc->mDevice & getDeviceForStrategy(STRATEGY_PHONE)) {
-                    LOGD("handleIncallSonification() high visibility muted, muteCount %d", muteCount);
+                    LOGV("handleIncallSonification() high visibility muted, muteCount %d", muteCount);
                     for (int i = 0; i < muteCount; i++) {
                         setStreamMute(stream, starting, mHardwareOutput);
                     }
@@ -1775,7 +1800,7 @@ void AudioPolicyManagerALSA::AudioOutputDescriptor::changeRefCount(AudioSystem::
         return;
     }
     mRefCount[stream] += delta;
-    LOGD("changeRefCount() stream %d, count %d", stream, mRefCount[stream]);
+    LOGV("changeRefCount() stream %d, count %d", stream, mRefCount[stream]);
 }
 
 bool AudioPolicyManagerALSA::AudioOutputDescriptor::isUsedByStrategy(routing_strategy strategy)
@@ -1863,6 +1888,5 @@ void AudioPolicyManagerALSA::StreamDescriptor::dump(char* buffer, size_t size)
             mMuteCount,
             mCanBeMuted);
 }
-
 
 }; // namespace android

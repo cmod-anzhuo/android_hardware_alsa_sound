@@ -316,4 +316,33 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
     return buffer;
 }
 
+#ifdef HAVE_FM_RADIO
+static status_t set_volume_fm(uint32_t volume)
+{
+    int returnval = 0;
+    float ratio = 2.5;
+    char s1[100] = "hcitool cmd 0x3f 0xa 0x5 0xc0 0x41 0xf 0 0x20 0 0 0";
+    char s2[100] = "hcitool cmd 0x3f 0xa 0x5 0xe4 0x41 0xf 0 0x00 0 0 0";
+    char s3[100] = "hcitool cmd 0x3f 0xa 0x5 0xe0 0x41 0xf 0 ";
+    char stemp[10] = "";
+    char *pstarget = s3;
+    volume = (unsigned int)(volume * ratio);
+    sprintf(stemp, "0x%x ", volume);
+    pstarget = strcat(s3, stemp);
+    pstarget = strcat(s3, "0 0 0");
+    system(s1);
+    system(s2);
+    system(s3);
+    return returnval;
+}
+
+status_t AudioHardwareALSA::setFmVolume(float v)
+{
+    int vol = AudioSystem::logToLinear(v);
+    LOGD("setFmVolume %d", vol);
+    set_volume_fm(vol);
+    return NO_ERROR;
+}
+#endif
+
 }       // namespace android
