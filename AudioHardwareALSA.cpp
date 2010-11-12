@@ -48,7 +48,7 @@ namespace android
 
 // ----------------------------------------------------------------------------
 const uint32_t inputSamplingRates[] = {
-        11025, 16000, 22050, 44100
+        11025, 16000, 22050, 44100, 48000
 };
 
 static void ALSAErrorHandler(const char *file,
@@ -192,13 +192,12 @@ static inline uint32_t popCount(uint32_t u)
 uint32_t getInputSampleRate(uint32_t sampleRate)
 {
     uint32_t i;
-    uint32_t prevDelta;
-    uint32_t delta;
+    uint32_t dblSampleRate = sampleRate *2;
 
-    for (i = 0, prevDelta = 0xFFFFFFFF; i < sizeof(inputSamplingRates)/sizeof(uint32_t);
-                                                            i++, prevDelta = delta) {
-        delta = abs(sampleRate - inputSamplingRates[i]);
-        if (delta > prevDelta) break;
+    // use actual sample rate, or nearest double sample rate to resample.
+    for (i = 0; i < sizeof(inputSamplingRates)/sizeof(uint32_t); i++) {
+        if (inputSamplingRates[i] == sampleRate || inputSamplingRates[i] >= dblSampleRate) 
+            return inputSamplingRates[i];
     }
     return inputSamplingRates[i-1];
 }
@@ -266,7 +265,8 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
         if (it->devices & devices) {
             it->channels = popCount(*channels);
             it->sampleRate = getInputSampleRate(*sampleRate);
-            it->bufferSize = 0.256*it->sampleRate*it->channels;
+//            it->bufferSize = 0.256*it->sampleRate*it->channels;
+            it->bufferSize = 2240;
             err = mALSADevice->open(&(*it), devices, mode());
             if (err) break;
             in = new AudioStreamInALSA(this, &(*it), acoustics);
@@ -311,9 +311,8 @@ size_t AudioHardwareALSA::getInputBufferSize(uint32_t sampleRate, int format, in
         LOGW("getInputBufferSize bad format: %d", format);
         return 0;
     }
-    int buffer = 0.256*getInputSampleRate(sampleRate)*channels;
-    LOGD("getInputBufferSize = %d",buffer);    
-    return buffer;
+
+    return 2240;
 }
 
 #ifdef HAVE_FM_RADIO
