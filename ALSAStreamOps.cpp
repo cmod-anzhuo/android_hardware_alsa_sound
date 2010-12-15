@@ -299,6 +299,7 @@ uint32_t ALSAStreamOps::channels() const
 void ALSAStreamOps::close()
 {
     mParent->mALSADevice->close(mHandle);
+    setIdleMode(true);
 }
 
 //
@@ -313,7 +314,18 @@ void ALSAStreamOps::close()
 //
 status_t ALSAStreamOps::open(int mode)
 {
+    setIdleMode(false);
     return mParent->mALSADevice->open(mHandle, mHandle->curDev, mode);
 }
+
+void ALSAStreamOps::setIdleMode(bool mode)
+{
+    ALSAControl *ac = new ALSAControl();
+    if (mode) 
+        ac->set("Idle Mode",1,0);
+    else 
+        ac->set("Idle Mode",0,0);
+    delete ac;
+} 
 
 }       // namespace android
